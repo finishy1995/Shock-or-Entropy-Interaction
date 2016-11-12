@@ -15,10 +15,17 @@
 #include <iomanip>
 #include <fstream>
 #include <string>
+#define times(a) (a*a)
+#define mem(a) memset(a, 0, sizeof(a))
 using namespace std;
 
 const int maxn = 5000;
 const int nValue = 201;
+const double xLeft = -5;
+const double xRight = 5;
+const double CFL = 0.6;
+const double maxT = 1.8;
+const double GAMA = 1.4;
 const double rL = 3.857143;
 const double rR = 1;
 const double uL = 2.629369;
@@ -26,7 +33,7 @@ const double uR = 0;
 const double pL = 10.33333;
 const double pR = 1;
 const double urR = 0.2;
-const double RK[3][3] = {1,0.75,1/3,0,0.25,2/3,1,0.25,2/3};
+const double RK[3][3] = {1, 0.75, 1.0/3.0, 0, 0.25, 2.0/3.0, 1, 0.25, 2.0/3.0};
 const string FILEPATH="/Users/cncuser/Desktop/c_code/CFD3/CFD3/";
 
 class solver
@@ -51,9 +58,7 @@ private:
     
     double kappa, gama, x1, x2, cfl, t, deltaX, deltaT;
     
-    double u[3][maxn+7], u1[3][maxn+7], u2[3][maxn+7], uLeft[3][maxn+7], uRight[3][maxn+7], sValue[3][maxn+7];
-    
-    void getU1();
+    double u[3][maxn], u1[3][maxn], uLeft[3][maxn], uRight[3][maxn], sValue[3][maxn];
     
     void getDeltaT();
     
@@ -82,49 +87,52 @@ void solver::reset()
     int i;
     double xpos;
     
-    gama = 1.4;
+    gama = GAMA;
     n = nValue;
-    x1 = 0;
-    x2 = 10;
-    cfl = 0.6;
-    t = 1.8;
+    x1 = xLeft;
+    x2 = xRight;
+    cfl = CFL;
+    t = maxT;
     deltaX = (x2-x1)/(n-1);
+    mem(u);
+    mem(u1);
+    mem(uLeft);
+    mem(uRight);
+    mem(sValue);
     
-    for (i=0;i<=(n+6);i++)
+    for (i=0;i<n;i++)
     {
-        xpos = x1+(i-4)*deltaX;
-        if (xpos<4)
+        xpos = x1+i*deltaX;
+        if (xpos>4)
         {
             u[0][i] = rL;
             u[1][i] = rL*uL;
-            u[2][i] = 0.5*rL*uL*uL+1.0/(gama-1)*pL;
+            u[2][i] = 0.5*rL*uL*uL+pL/(gama-1.0);
         } else {
-            u[0][i] = rR+urR*sin(5*xpos);
+            u[0][i] = rR+urR*sin(5.0*xpos);
             u[1][i] = rR*uR;
-            u[2][i] = 0.5*rR*uR*uR+1.0/(gama-1)*pR;
+            u[2][i] = 0.5*rR*uR*uR+pR/(gama-1.0);
         }
     }
 }
 
 void solver::solve()
 {
-    int i, j, k, ii;
+    int i, j, k;
     double tNow = 0;
-    
     reset();
-    for (k=1; k<=maxn; k++)
+    for (i=0; i<n; i++)
+        for (j=0; j<3; j++)
+            u1[j][i] = u[j][i];
+    
+    while (tNow<t)
     {
-        getU1();
         getDeltaT();
         if (tNow+deltaT>t) deltaT = t-tNow;
         tNow += deltaT;
-        for (i=4; i<(n+4); i++)
-            for (j=0; j<3; j++)
-                u2[j][i] = u[j][i];
         
-        for (ii=0; ii<3; ii++)
+        for (k=0; k<3; k++)
         {
-            getU1();
             switch (limiter)
             {
                 case 0:
@@ -153,21 +161,14 @@ void solver::solve()
                     break;
             }
             roeSolve();
-            sValue[0][4] = 0;
-            sValue[1][4] = 0;
-            sValue[2][4] = 0;
-            sValue[0][n+3] = 0;
-            sValue[1][n+3] = 0;
-            sValue[2][n+3] = 0;
-            for (i=4; i<(n+4); i++)
+            for (i=1; i<n; i++)
                 for (j=0; j<3; j++)
-                    u[j][i] = RK[0][ii]*u2[j][i]+RK[1][ii]*u[j][i]+RK[2][ii]*deltaT/deltaX*sValue[j][i];
+                    u1[j][i] = RK[0][k]*u[j][i]+RK[1][k]*u1[j][i]+RK[2][k]*deltaT/deltaX*sValue[j][i];
         }
-        if (tNow == t)
-        {
-            getU1();
-            break;
-        }
+        
+        for (i=0; i<n; i++)
+            for (j=0; j<3; j++)
+                u[j][i] = u1[j][i];
     }
 }
 
@@ -180,7 +181,7 @@ void solver::output(string filename)
         for(int i=0; i<3; i++)
         {
             for(int j=0; j<n; j++)
-                out<<u1[i][j]<<" ";
+                out<<u[i][j]<<" ";
             out<<"\n";
         }
         out.close();
@@ -200,18 +201,18 @@ void solver::setLimiter(int value)
 
 void solver::roeSolve()
 {
-    double l[4], r[4], s[3], lamda[3], sm[3], sFinal[3], f[3][maxn+7];
+    double l[4], r[4], s[3], lamda[3], sm[3], sFinal[3], f[3][maxn];
     double tempL, tempR;
     double tol = 1e-6;
     
-    for (int i=4; i<(n+3); i++)
+    for (int i=0; i<(n-1); i++)
     {
         l[0] = uLeft[0][i];
-        l[1] = uLeft[1][i];
+        l[1] = uLeft[1][i]/uLeft[0][i];
         l[2] = uLeft[2][i];
         l[3] = (l[2]-0.5*l[0]*l[1]*l[1])*(gama-1);
         r[0] = uRight[0][i];
-        r[1] = uRight[1][i];
+        r[1] = uRight[1][i]/uRight[0][i];
         r[2] = uRight[2][i];
         r[3] = (r[2]-0.5*r[0]*r[1]*r[1])*(gama-1);
         
@@ -243,37 +244,26 @@ void solver::roeSolve()
         f[1][i] = 0.5*(l[0]*l[1]*l[1]+l[3]+r[0]*r[1]*r[1]+r[3]-sFinal[1]);
         f[2][i] = 0.5*((l[2]+l[3])*l[1]+(r[2]+r[3])*r[1]-sFinal[2]);
     }
-    for (int i=5; i<(n+4); i++)
+    for (int i=1; i<(n-1); i++)
         for (int j=0; j<3; j++)
             sValue[j][i] = f[j][i-1]-f[j][i];
 }
 
-void solver::getU1()
-{
-    for (int i=1; i<(n+7); i++)
-    {
-        u1[0][i] = u[0][i];
-        u1[1][i] = u[1][i]/u[0][i];
-        u1[2][i] = (gama-1.0)*(u[2][i]-0.5/u[0][i]*u[1][i]*u[1][i]);
-        if (u1[2][i]<0)
-        {
-            cout<<"Something wrong happened."<<endl;
-            exit(1);
-        }
-    }
-}
-
 void solver::getDeltaT()
 {
-    double maxValue = 0;
-    for (int i=4; i<(n+4); i++)
-        maxValue = max(maxValue,fabs(u1[1][i])+sqrt(gama*u1[2][i]/u1[0][i]));
+    double maxValue = 1e-99;
+    double temp;
+    for(int i=0; i<n; i++)
+    {
+        temp = sqrt(gama*((gama-1.0)*(u[2][i]-0.5*u[1][i]*u[1][i]/u[0][i]))/u[0][i])+fabs(u[1][i]/u[0][i]);
+        if (temp>maxValue) maxValue = temp;
+    }
     deltaT = deltaX/maxValue*cfl;
 }
 
 void solver::nonMuscl()
 {
-    for (int i=4; i<(n+3); i++)
+    for (int i=0; i<(n-1); i++)
     {
         uLeft[0][i] = u1[0][i];
         uLeft[1][i] = u1[1][i];
@@ -291,7 +281,7 @@ void solver::vanLeer()
     double RL[3], RR[3], phiRL[3], phiRLRV[3], phiRR[3], phiRRRV[3];
     int i, j;
 
-    for (i=4; i<(n+3); i++)
+    for (i=1; i<(n-2); i++)
     {
         deltaP[0] = u1[0][i+1]-u1[0][i];
         deltaP[1] = u1[1][i+1]-u1[1][i];
@@ -299,6 +289,7 @@ void solver::vanLeer()
         deltaM[0] = u1[0][i]-u1[0][i-1];
         deltaM[1] = u1[1][i]-u1[1][i-1];
         deltaM[2] = u1[2][i]-u1[2][i-1];
+        if (i==1) cout<<deltaP[0]<<" "<<deltaM[0]<<endl;
         for (j=0; j<3; j++)
         {
             RL[j] = (deltaP[j]+tol)/(deltaM[j]+tol);
@@ -322,6 +313,18 @@ void solver::vanLeer()
         }
         for (j=0; j<3; j++)
             uRight[j][i] = u1[j][i+1]-0.5*deltaP[j]*0.5*((1-kappa)*phiRR[j]/RR[j]+(1+kappa)*phiRRRV[j]);
+        
+        cout<<"i = "<<i<<" "<<uLeft[0][i]-u1[0][i]<<" "<<uLeft[1][i]-u1[1][i]<<" "<<uLeft[2][i]-u1[2][i]<<" "<<endl;
+    }
+    
+    if ((i==0) || (i==(n-2)))
+    {
+        uLeft[0][i] = u1[0][i];
+        uLeft[1][i] = u1[1][i];
+        uLeft[2][i] = u1[2][i];
+        uRight[0][i] = u1[0][i+1];
+        uRight[1][i] = u1[1][i+1];
+        uRight[2][i] = u1[2][i+1];
     }
 }
 
