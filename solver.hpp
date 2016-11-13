@@ -481,6 +481,8 @@ void solver::superbee()
             RL[j] = (deltaP[j]+tol)/(deltaM[j]+tol);
             phiRL[j] = fmax(fmin(2.0*RL[j], 1.0), fmin(RL[j], 2.0));
             phiRLRV[j] = fmax(fmin(2.0/RL[j], 1.0), fmin(1.0/RL[j], 2.0));
+            if (phiRL[j]<0) phiRL[j] = 0;
+            if (phiRLRV[j]<0) phiRLRV[j] = 0;
         }
         for (j=0; j<3; j++)
             uLeft[j][i] = u1[j][i]+0.5*deltaM[j]*0.5*((1-kappa)*phiRL[j]+(1+kappa)*RL[j]*phiRLRV[j]);
@@ -496,6 +498,8 @@ void solver::superbee()
             RR[j] = (deltaP[j]+tol)/(deltaM[j]+tol);
             phiRR[j] = fmax(fmin(2.0*RR[j], 1.0), fmin(RR[j], 2.0));
             phiRRRV[j] = fmax(fmin(2.0/RR[j], 1.0), fmin(1.0/RR[j], 2.0));
+            if (phiRR[j]<0) phiRR[j] = 0;
+            if (phiRRRV[j]<0) phiRRRV[j] = 0;
         }
         for (j=0; j<3; j++)
             uRight[j][i] = u1[j][i+1]-0.5*deltaP[j]*0.5*((1-kappa)*phiRR[j]/RR[j]+(1+kappa)*phiRRRV[j]);
