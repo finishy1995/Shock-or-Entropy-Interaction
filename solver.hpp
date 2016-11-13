@@ -58,7 +58,7 @@ private:
     
     double kappa, gama, x1, x2, cfl, t, deltaX, deltaT;
     
-    double u[3][maxn], u1[3][maxn], uLeft[3][maxn], uRight[3][maxn], sValue[3][maxn];
+    double u[3][maxn+8], u1[3][maxn+8], uLeft[3][maxn+8], uRight[3][maxn+8], sValue[3][maxn+8];
     
     void getDeltaT();
     
@@ -100,18 +100,18 @@ void solver::reset()
     mem(uRight);
     mem(sValue);
     
-    for (i=0;i<n;i++)
+    for (i=0;i<(n+8);i++)
     {
-        xpos = x1+i*deltaX;
-        if (xpos>4)
+        xpos = x1+(i-4)*deltaX;
+        if (xpos<-4)
         {
             u[0][i] = rL;
             u[1][i] = rL*uL;
-            u[2][i] = 0.5*rL*uL*uL+pL/(gama-1.0);
+            u[2][i] = 0.5*rL*times(uL)+pL/(gama-1.0);
         } else {
             u[0][i] = rR+urR*sin(5.0*xpos);
             u[1][i] = rR*uR;
-            u[2][i] = 0.5*rR*uR*uR+pR/(gama-1.0);
+            u[2][i] = 0.5*rR*times(uR)+pR/(gama-1.0);
         }
     }
 }
@@ -120,8 +120,9 @@ void solver::solve()
 {
     int i, j, k;
     double tNow = 0;
+    
     reset();
-    for (i=0; i<n; i++)
+    for (i=0; i<(n+8); i++)
         for (j=0; j<3; j++)
             u1[j][i] = u[j][i];
     
@@ -161,12 +162,18 @@ void solver::solve()
                     break;
             }
             roeSolve();
-            for (i=1; i<n; i++)
+            sValue[0][0] = 0;
+            sValue[1][0] = 0;
+            sValue[2][0] = 0;
+            sValue[0][n-1] = 0;
+            sValue[1][n-1] = 0;
+            sValue[2][n-1] = 0;
+            for (i=4; i<(n+4); i++)
                 for (j=0; j<3; j++)
                     u1[j][i] = RK[0][k]*u[j][i]+RK[1][k]*u1[j][i]+RK[2][k]*deltaT/deltaX*sValue[j][i];
         }
         
-        for (i=0; i<n; i++)
+        for (i=0; i<(n+8); i++)
             for (j=0; j<3; j++)
                 u[j][i] = u1[j][i];
     }
@@ -178,12 +185,18 @@ void solver::output(string filename)
     if (out.is_open())
     {
         out<<x1<<" "<<x2<<" "<<limiter<<" "<<kappa<<setprecision(12)<<fixed<<"\n";
-        for(int i=0; i<3; i++)
-        {
-            for(int j=0; j<n; j++)
-                out<<u[i][j]<<" ";
-            out<<"\n";
-        }
+        for(int i=4; i<(n+4); i++)
+            out<<u[0][i]<<" ";
+        out<<"\n";
+        for(int i=4; i<(n+4); i++)
+            out<<(u[1][i]/u[0][i])<<" ";
+        out<<"\n";
+        for(int i=4; i<(n+4); i++)
+            out<<u[2][i]<<" ";
+        out<<"\n";
+        for(int i=4; i<(n+4); i++)
+            out<<((u[2][i]-0.5/u[0][i]*times(u[1][i]))*(gama-1))<<" ";
+        out<<endl;
         out.close();
     }
     cout<<"Successful"<<endl;
@@ -205,22 +218,22 @@ void solver::roeSolve()
     double tempL, tempR;
     double tol = 1e-6;
     
-    for (int i=0; i<(n-1); i++)
+    for (int i=4; i<(n+3); i++)
     {
         l[0] = uLeft[0][i];
         l[1] = uLeft[1][i]/uLeft[0][i];
         l[2] = uLeft[2][i];
-        l[3] = (l[2]-0.5*l[0]*l[1]*l[1])*(gama-1);
+        l[3] = (l[2]-0.5*l[0]*times(l[1]))*(gama-1);
         r[0] = uRight[0][i];
         r[1] = uRight[1][i]/uRight[0][i];
         r[2] = uRight[2][i];
-        r[3] = (r[2]-0.5*r[0]*r[1]*r[1])*(gama-1);
+        r[3] = (r[2]-0.5*r[0]*times(r[1]))*(gama-1);
         
         s[0] = (sqrt(l[0])*l[1]+sqrt(r[0])*r[1])/(sqrt(l[0])+sqrt(r[0]));;
         tempL = (l[2]+l[3])/l[0];
         tempR = (r[2]+r[3])/r[0];
         s[2] = (sqrt(l[0])*tempL+sqrt(r[0])*tempR)/(sqrt(l[0])+sqrt(r[0]));
-        s[1] = sqrt((gama-1)*(s[2]-0.5*s[0]*s[0]));
+        s[1] = sqrt((gama-1)*(s[2]-0.5*times(s[0])));
         
         if (fabs(s[0])>=tol) lamda[0] = fabs(s[0]);
         else lamda[0]=(s[0]*s[0]+tol*tol)/2.0/tol;
@@ -244,7 +257,7 @@ void solver::roeSolve()
         f[1][i] = 0.5*(l[0]*l[1]*l[1]+l[3]+r[0]*r[1]*r[1]+r[3]-sFinal[1]);
         f[2][i] = 0.5*((l[2]+l[3])*l[1]+(r[2]+r[3])*r[1]-sFinal[2]);
     }
-    for (int i=1; i<(n-1); i++)
+    for (int i=5; i<(n+3); i++)
         for (int j=0; j<3; j++)
             sValue[j][i] = f[j][i-1]-f[j][i];
 }
@@ -253,7 +266,7 @@ void solver::getDeltaT()
 {
     double maxValue = 1e-99;
     double temp;
-    for(int i=0; i<n; i++)
+    for(int i=4; i<(n+4); i++)
     {
         temp = sqrt(gama*((gama-1.0)*(u[2][i]-0.5*u[1][i]*u[1][i]/u[0][i]))/u[0][i])+fabs(u[1][i]/u[0][i]);
         if (temp>maxValue) maxValue = temp;
@@ -263,7 +276,7 @@ void solver::getDeltaT()
 
 void solver::nonMuscl()
 {
-    for (int i=0; i<(n-1); i++)
+    for (int i=4; i<(n+3); i++)
     {
         uLeft[0][i] = u1[0][i];
         uLeft[1][i] = u1[1][i];
@@ -281,7 +294,7 @@ void solver::vanLeer()
     double RL[3], RR[3], phiRL[3], phiRLRV[3], phiRR[3], phiRRRV[3];
     int i, j;
 
-    for (i=1; i<(n-2); i++)
+    for (i=5; i<(n+2); i++)
     {
         deltaP[0] = u1[0][i+1]-u1[0][i];
         deltaP[1] = u1[1][i+1]-u1[1][i];
@@ -289,7 +302,6 @@ void solver::vanLeer()
         deltaM[0] = u1[0][i]-u1[0][i-1];
         deltaM[1] = u1[1][i]-u1[1][i-1];
         deltaM[2] = u1[2][i]-u1[2][i-1];
-        if (i==1) cout<<deltaP[0]<<" "<<deltaM[0]<<endl;
         for (j=0; j<3; j++)
         {
             RL[j] = (deltaP[j]+tol)/(deltaM[j]+tol);
@@ -313,19 +325,20 @@ void solver::vanLeer()
         }
         for (j=0; j<3; j++)
             uRight[j][i] = u1[j][i+1]-0.5*deltaP[j]*0.5*((1-kappa)*phiRR[j]/RR[j]+(1+kappa)*phiRRRV[j]);
-        
-        cout<<"i = "<<i<<" "<<uLeft[0][i]-u1[0][i]<<" "<<uLeft[1][i]-u1[1][i]<<" "<<uLeft[2][i]-u1[2][i]<<" "<<endl;
     }
     
-    if ((i==0) || (i==(n-2)))
-    {
-        uLeft[0][i] = u1[0][i];
-        uLeft[1][i] = u1[1][i];
-        uLeft[2][i] = u1[2][i];
-        uRight[0][i] = u1[0][i+1];
-        uRight[1][i] = u1[1][i+1];
-        uRight[2][i] = u1[2][i+1];
-    }
+    uLeft[0][4] = u1[0][4];
+    uLeft[1][4] = u1[1][4];
+    uLeft[2][4] = u1[2][4];
+    uRight[0][4] = u1[0][5];
+    uRight[1][4] = u1[1][5];
+    uRight[2][4] = u1[2][5];
+    uLeft[0][n+2] = u1[0][n+2];
+    uLeft[1][n+2] = u1[1][n+2];
+    uLeft[2][n+2] = u1[2][n+2];
+    uRight[0][n+2] = u1[0][n+3];
+    uRight[1][n+2] = u1[1][n+3];
+    uRight[2][n+2] = u1[2][n+3];
 }
 
 void solver::vanAlbada()
@@ -335,7 +348,7 @@ void solver::vanAlbada()
     double RL[3], RR[3], phiRL[3], phiRLRV[3], phiRR[3], phiRRRV[3];
     int i, j;
     
-    for (i=4; i<(n+3); i++)
+    for (i=5; i<(n+2); i++)
     {
         deltaP[0] = u1[0][i+1]-u1[0][i];
         deltaP[1] = u1[1][i+1]-u1[1][i];
@@ -367,6 +380,19 @@ void solver::vanAlbada()
         for (j=0; j<3; j++)
             uRight[j][i] = u1[j][i+1]-0.5*deltaP[j]*0.5*((1-kappa)*phiRR[j]/RR[j]+(1+kappa)*phiRRRV[j]);
     }
+    
+    uLeft[0][4] = u1[0][4];
+    uLeft[1][4] = u1[1][4];
+    uLeft[2][4] = u1[2][4];
+    uRight[0][4] = u1[0][5];
+    uRight[1][4] = u1[1][5];
+    uRight[2][4] = u1[2][5];
+    uLeft[0][n+2] = u1[0][n+2];
+    uLeft[1][n+2] = u1[1][n+2];
+    uLeft[2][n+2] = u1[2][n+2];
+    uRight[0][n+2] = u1[0][n+3];
+    uRight[1][n+2] = u1[1][n+3];
+    uRight[2][n+2] = u1[2][n+3];
 }
 
 void solver::minmod()
@@ -376,7 +402,7 @@ void solver::minmod()
     double RL[3], RR[3], phiRL[3], phiRLRV[3], phiRR[3], phiRRRV[3];
     int i, j;
         
-    for (i=4; i<(n+3); i++)
+    for (i=5; i<(n+2); i++)
     {
         deltaP[0] = u1[0][i+1]-u1[0][i];
         deltaP[1] = u1[1][i+1]-u1[1][i];
@@ -420,6 +446,19 @@ void solver::minmod()
         for (j=0; j<3; j++)
             uRight[j][i] = u1[j][i+1]-0.5*deltaP[j]*0.5*((1-kappa)*phiRR[j]/RR[j]+(1+kappa)*phiRRRV[j]);
     }
+    
+    uLeft[0][4] = u1[0][4];
+    uLeft[1][4] = u1[1][4];
+    uLeft[2][4] = u1[2][4];
+    uRight[0][4] = u1[0][5];
+    uRight[1][4] = u1[1][5];
+    uRight[2][4] = u1[2][5];
+    uLeft[0][n+2] = u1[0][n+2];
+    uLeft[1][n+2] = u1[1][n+2];
+    uLeft[2][n+2] = u1[2][n+2];
+    uRight[0][n+2] = u1[0][n+3];
+    uRight[1][n+2] = u1[1][n+3];
+    uRight[2][n+2] = u1[2][n+3];
 }
 
 void solver::superbee()
@@ -429,7 +468,7 @@ void solver::superbee()
     double RL[3], RR[3], phiRL[3], phiRLRV[3], phiRR[3], phiRRRV[3];
     int i, j;
     
-    for (i=4; i<(n+3); i++)
+    for (i=5; i<(n+2); i++)
     {
         deltaP[0] = u1[0][i+1]-u1[0][i];
         deltaP[1] = u1[1][i+1]-u1[1][i];
@@ -461,6 +500,19 @@ void solver::superbee()
         for (j=0; j<3; j++)
             uRight[j][i] = u1[j][i+1]-0.5*deltaP[j]*0.5*((1-kappa)*phiRR[j]/RR[j]+(1+kappa)*phiRRRV[j]);
     }
+    
+    uLeft[0][4] = u1[0][4];
+    uLeft[1][4] = u1[1][4];
+    uLeft[2][4] = u1[2][4];
+    uRight[0][4] = u1[0][5];
+    uRight[1][4] = u1[1][5];
+    uRight[2][4] = u1[2][5];
+    uLeft[0][n+2] = u1[0][n+2];
+    uLeft[1][n+2] = u1[1][n+2];
+    uLeft[2][n+2] = u1[2][n+2];
+    uRight[0][n+2] = u1[0][n+3];
+    uRight[1][n+2] = u1[1][n+3];
+    uRight[2][n+2] = u1[2][n+3];
 }
 
 #endif /* solver_hpp */

@@ -29,7 +29,7 @@ int main(int argc, const char * argv[]) {
     solver.output("kappa0.txt");
     solver.setKappa(1.0/3.0);
     solver.solve();
-    solver.output("kappa1/3.txt");
+    solver.output("kappa13.txt");
     solver.setKappa(1.0);
     solver.solve();
     solver.output("kappa1.txt");
